@@ -5,12 +5,13 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 */
 
-use clap::{App, Arg}; //, SubCommand};
+use clap::{App, AppSettings, Arg};
 
 fn main() {
     let matches = App::new("x")
         .version("0.0.1")
         .about("swiss army knife for the command line")
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .arg(
             Arg::new("port")
                 .short('p')
@@ -18,6 +19,15 @@ fn main() {
                 .about("TCP port to listen on")
                 .required(true)
                 .takes_value(true),
+        )
+        .subcommand(
+            App::new("merge").about(
+                "Read lines from TCP connections and writes them serially to STDOUT",
+            ),
+        )
+        .subcommand(
+            App::new("spread")
+                .about("Read lines from STDIN and write them to all TCP connections"),
         )
         .get_matches();
 
