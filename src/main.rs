@@ -22,7 +22,6 @@ fn main() {
         .get_matches();
 
     let p: u32 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
-
     println!("{:?}", p);
 }
 
