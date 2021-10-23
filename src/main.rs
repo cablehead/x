@@ -1,9 +1,7 @@
-/*
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-*/
 
 use clap::{App, AppSettings, Arg};
 
@@ -21,23 +19,26 @@ fn main() {
                 .takes_value(true),
         )
         .subcommand(
+            App::new("spread")
+                .about("Read lines from STDIN and write them to all TCP connections"),
+        )
+        .subcommand(
             App::new("merge").about(
                 "Read lines from TCP connections and writes them serially to STDOUT",
             ),
         )
-        .subcommand(
-            App::new("spread")
-                .about("Read lines from STDIN and write them to all TCP connections"),
-        )
         .get_matches();
 
-    let p: u32 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
-    println!("{:?}", p);
+    let port: u32 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
+    match matches.subcommand_name() {
+        Some("spread") => do_spread(port),
+        Some("merge") => do_merge(port),
+        _ => unreachable!(),
+    }
 }
 
-/*
-fn do_spread() {
-    let listener = TcpListener::bind("127.0.0.1:7879").unwrap();
+fn do_spread(port: u32) {
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
 
     let conns = Vec::new();
     let conns = Arc::new(Mutex::new(conns));
@@ -71,8 +72,8 @@ fn do_spread() {
     }
 }
 
-fn do_merge() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+fn do_merge(port: u32) {
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
 
     let (tx, rx) = mpsc::channel();
 
@@ -97,4 +98,3 @@ fn do_merge() {
         }
     }
 }
-*/
