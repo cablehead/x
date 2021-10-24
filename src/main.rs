@@ -9,30 +9,36 @@ fn main() {
     let matches = App::new("x")
         .version("0.0.1")
         .about("swiss army knife for the command line")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .arg(
-            Arg::new("port")
-                .short('p')
-                .long("port")
-                .about("TCP port to listen on")
-                .required(true)
-                .takes_value(true),
-        )
         .subcommand(
-            App::new("spread")
-                .about("Read lines from STDIN and writes them to all TCP connections"),
-        )
-        .subcommand(
-            App::new("merge").about(
-                "Read lines from TCP connections and writes them serially to STDOUT",
-            ),
+            App::new("tcp")
+                .about("swiss army knife for the command line")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .arg(
+                    Arg::new("port")
+                        .short('p')
+                        .long("port")
+                        .about("TCP port to listen on")
+                        .required(true)
+                        .takes_value(true),
+                )
+                .subcommand(App::new("spread").about(
+                    "Read lines from STDIN and writes them to all TCP connections",
+                ))
+                .subcommand(App::new("merge").about(
+                    "Read lines from TCP connections and writes them serially to STDOUT",
+                )),
         )
         .get_matches();
 
-    let port: u32 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
-    match matches.subcommand_name() {
-        Some("spread") => do_spread(port),
-        Some("merge") => do_merge(port),
+    match matches.subcommand() {
+        Some(("tcp", matches)) => {
+            let port: u32 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
+            match matches.subcommand_name() {
+                Some("spread") => do_spread(port),
+                Some("merge") => do_merge(port),
+                _ => unreachable!(),
+            }
+        }
         _ => unreachable!(),
     }
 }
