@@ -20,7 +20,7 @@ fn main() {
         )
         .subcommand(
             App::new("spread")
-                .about("Read lines from STDIN and write them to all TCP connections"),
+                .about("Read lines from STDIN and writes them to all TCP connections"),
         )
         .subcommand(
             App::new("merge").about(
