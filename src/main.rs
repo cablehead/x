@@ -1,5 +1,5 @@
 use std::io::{self, BufRead, BufReader, Write};
-use std::net::TcpListener;
+use std::net;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
@@ -11,10 +11,6 @@ fn main() {
         .about("swiss army knife for the command line")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)
-        .subcommand(App::new("http").about(
-            "Serve HTTP. Requests are written to STDOUT and \
-            responses are read from STDIN",
-        ))
         .subcommand(
             App::new("tcp")
                 .about("TCP utilities")
@@ -28,6 +24,10 @@ fn main() {
                         .required(true)
                         .takes_value(true),
                 )
+                .subcommand(App::new("http").about(
+                    "Serve HTTP. Requests are written to STDOUT and \
+                    responses are read from STDIN",
+                ))
                 .subcommand(App::new("merge").about(
                     "Read lines from TCP connections and writes them serially to STDOUT",
                 ))
@@ -39,10 +39,15 @@ fn main() {
 
     match matches.subcommand() {
         Some(("tcp", matches)) => {
-            let port: u32 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
+            let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
+            let sock = net::SocketAddr::new(
+                net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)),
+                port,
+            );
             match matches.subcommand_name() {
-                Some("merge") => do_merge(port),
-                Some("spread") => do_spread(port),
+                Some("http") => do_http(sock),
+                Some("merge") => do_merge(sock),
+                Some("spread") => do_spread(sock),
                 _ => unreachable!(),
             }
         }
@@ -50,8 +55,16 @@ fn main() {
     }
 }
 
-fn do_merge(port: u32) {
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+fn do_http(sock: net::SocketAddr) {
+    let server = tiny_http::Server::http(sock).unwrap();
+    for req in server.incoming_requests() {
+        let res = tiny_http::Response::from_string("hello world\n".to_string());
+        let _ = req.respond(res);
+    }
+}
+
+fn do_merge(sock: net::SocketAddr) {
+    let listener = net::TcpListener::bind(sock).unwrap();
 
     let (tx, rx) = mpsc::channel();
 
@@ -77,8 +90,8 @@ fn do_merge(port: u32) {
     }
 }
 
-fn do_spread(port: u32) {
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+fn do_spread(sock: net::SocketAddr) {
+    let listener = net::TcpListener::bind(sock).unwrap();
 
     let conns = Vec::new();
     let conns = Arc::new(Mutex::new(conns));
