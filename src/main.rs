@@ -1,27 +1,18 @@
+use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
+use anyhow::{Context, Result};
 use clap::{App, AppSettings, Arg};
 
-fn main() {
+fn main() -> Result<()> {
     let matches = App::new("x")
         .version("0.0.1")
         .about("swiss army knife for the command line")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)
-        .subcommand(
-            App::new("log")
-                .about("Logging utilities")
-                .setting(AppSettings::DisableHelpSubcommand)
-                .arg(
-                    Arg::new("path")
-                        .index(1)
-                        .about("Path to write to")
-                        .required(true),
-                ),
-        )
         .subcommand(
             App::new("tcp")
                 .about("TCP utilities")
@@ -46,12 +37,23 @@ fn main() {
                     "Read lines from STDIN and writes them to all TCP connections",
                 )),
         )
+        .subcommand(
+            App::new("wal")
+                .about("Logging utilities")
+                .setting(AppSettings::DisableHelpSubcommand)
+                .arg(
+                    Arg::new("path")
+                        .index(1)
+                        .about("Path to write to")
+                        .required(true),
+                ),
+        )
         .get_matches();
 
     match matches.subcommand() {
-        Some(("log", matches)) => {
+        Some(("wal", matches)) => {
             let path: String = matches.value_of_t("path").unwrap();
-            do_log(path);
+            do_wal(&path)?;
         }
         Some(("tcp", matches)) => {
             let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
@@ -60,29 +62,28 @@ fn main() {
                 port,
             );
             match matches.subcommand_name() {
-                Some("http") => do_http(sock),
-                Some("merge") => do_merge(sock),
-                Some("spread") => do_spread(sock),
+                Some("http") => do_http(sock)?,
+                Some("merge") => do_merge(sock)?,
+                Some("spread") => do_spread(sock)?,
                 _ => unreachable!(),
             }
         }
         _ => unreachable!(),
     }
+
+    Ok(())
 }
 
-fn do_log(path: String) {
-    println!("path: {}", path);
-}
-
-fn do_http(sock: net::SocketAddr) {
+fn do_http(sock: net::SocketAddr) -> Result<()> {
     let server = tiny_http::Server::http(sock).unwrap();
     for req in server.incoming_requests() {
         let res = tiny_http::Response::from_string("hello world\n".to_string());
         let _ = req.respond(res);
     }
+    Ok(())
 }
 
-fn do_merge(sock: net::SocketAddr) {
+fn do_merge(sock: net::SocketAddr) -> Result<()> {
     let listener = net::TcpListener::bind(sock).unwrap();
 
     let (tx, rx) = mpsc::channel();
@@ -107,9 +108,10 @@ fn do_merge(sock: net::SocketAddr) {
             break;
         }
     }
+    Ok(())
 }
 
-fn do_spread(sock: net::SocketAddr) {
+fn do_spread(sock: net::SocketAddr) -> Result<()> {
     let listener = net::TcpListener::bind(sock).unwrap();
 
     let conns = Vec::new();
@@ -142,4 +144,15 @@ fn do_spread(sock: net::SocketAddr) {
             .expect("poisoned")
             .retain(|conn| conn.send(line.clone()).is_ok());
     }
+    Ok(())
+}
+
+fn do_wal(path: &str) -> Result<()> {
+    fs::create_dir(path)
+        .or_else(|e| match e.kind() {
+            io::ErrorKind::AlreadyExists => Ok(()),
+            _ => Err(e),
+        })
+        .with_context(|| format!("could not create directory `{}`", path))?;
+    Ok(())
 }
