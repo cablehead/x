@@ -12,6 +12,17 @@ fn main() {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)
         .subcommand(
+            App::new("log")
+                .about("Logging utilities")
+                .setting(AppSettings::DisableHelpSubcommand)
+                .arg(
+                    Arg::new("path")
+                        .index(1)
+                        .about("Path to write to")
+                        .required(true),
+                ),
+        )
+        .subcommand(
             App::new("tcp")
                 .about("TCP utilities")
                 .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -38,6 +49,10 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
+        Some(("log", matches)) => {
+            let path: String = matches.value_of_t("path").unwrap();
+            do_log(path);
+        }
         Some(("tcp", matches)) => {
             let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
             let sock = net::SocketAddr::new(
@@ -53,6 +68,10 @@ fn main() {
         }
         _ => unreachable!(),
     }
+}
+
+fn do_log(path: String) {
+    println!("path: {}", path);
 }
 
 fn do_http(sock: net::SocketAddr) {
