@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net;
+use std::os::unix::fs::symlink;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
@@ -147,6 +148,8 @@ fn do_spread(sock: net::SocketAddr) -> Result<()> {
     Ok(())
 }
 
+use glob::glob;
+
 fn do_wal(path: &str) -> Result<()> {
     fs::create_dir(path)
         .or_else(|e| match e.kind() {
@@ -154,5 +157,22 @@ fn do_wal(path: &str) -> Result<()> {
             _ => Err(e),
         })
         .with_context(|| format!("could not create directory `{}`", path))?;
+
+    std::env::set_current_dir(path)?;
+
+    // let first = format!("{:020}", 0);
+    // println!("first: {}", first);
+
+    let expr = "[0-9]".repeat(20);
+    let segments = glob(&expr)?.map(|x| x.unwrap()).collect::<Vec<_>>();
+    // TODO: case when segments is 0
+
+    symlink(segments.last().unwrap(), "current").or_else(|e| match e.kind() {
+        io::ErrorKind::AlreadyExists => {
+            let _ = fs::remove_file("current");
+            return symlink(segments.last().unwrap(), "current");
+        }
+        _ => Err(e),
+    })?;
     Ok(())
 }
