@@ -54,6 +54,7 @@ fn main() -> Result<()> {
     match matches.subcommand() {
         Some(("wal", matches)) => {
             let path: String = matches.value_of_t("path").unwrap();
+            let path = std::path::Path::new(&path);
             do_wal(&path)?;
         }
         Some(("tcp", matches)) => {
@@ -150,29 +151,88 @@ fn do_spread(sock: net::SocketAddr) -> Result<()> {
 
 use glob::glob;
 
-fn do_wal(path: &str) -> Result<()> {
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    use anyhow::Result;
+
+    #[test]
+    fn wal_bootstrap() -> Result<()> {
+        let dir = tempdir()?;
+        println!();
+        println!("---");
+        println!();
+        println!("{:?}", dir);
+
+        do_wal(dir.path())?;
+
+        do_wal(dir.path())?;
+
+        let output = std::process::Command::new("ls").arg("-al").output()?;
+        io::stdout().write_all(&output.stdout).unwrap();
+
+        println!();
+        println!("---");
+        println!();
+        Ok(())
+    }
+}
+
+fn do_wal(path: &std::path::Path) -> Result<()> {
+    // TODO:
+    // - max segment size as arg
+    // - write stdin to segment
+    // - rotate segment when max size reached
+    // - tests
     fs::create_dir(path)
         .or_else(|e| match e.kind() {
             io::ErrorKind::AlreadyExists => Ok(()),
             _ => Err(e),
         })
-        .with_context(|| format!("could not create directory `{}`", path))?;
+        .with_context(|| format!("could not create directory `{}`", path.display()))?;
 
     std::env::set_current_dir(path)?;
 
     // let first = format!("{:020}", 0);
     // println!("first: {}", first);
 
+    let expected = 0;
     let expr = "[0-9]".repeat(20);
-    let segments = glob(&expr)?.map(|x| x.unwrap()).collect::<Vec<_>>();
-    // TODO: case when segments is 0
+    for segment in glob(&expr)?.map(|x| x.unwrap()) {
+        let offset = segment
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap();
 
-    symlink(segments.last().unwrap(), "current").or_else(|e| match e.kind() {
+        assert!(
+            offset == expected,
+            "expected: {}, have: {}",
+            expected,
+            offset
+        );
+    }
+
+    let current = format!("{:020}", expected);
+
+    let mut fh = fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(&current)?;
+
+    symlink(&current, "current").or_else(|e| match e.kind() {
         io::ErrorKind::AlreadyExists => {
             let _ = fs::remove_file("current");
-            return symlink(segments.last().unwrap(), "current");
+            return symlink(current, "current");
         }
         _ => Err(e),
     })?;
+
+    write!(fh, "hello\n")?;
+
     Ok(())
 }
