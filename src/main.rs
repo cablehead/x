@@ -198,7 +198,7 @@ fn do_wal(path: &std::path::Path) -> Result<()> {
     // let first = format!("{:020}", 0);
     // println!("first: {}", first);
 
-    let expected = 0;
+    let mut expected = 0;
     let expr = "[0-9]".repeat(20);
     for segment in glob(&expr)?.map(|x| x.unwrap()) {
         let offset = segment
@@ -208,13 +208,13 @@ fn do_wal(path: &std::path::Path) -> Result<()> {
             .unwrap()
             .parse::<u64>()
             .unwrap();
-
         assert!(
             offset == expected,
-            "expected: {}, have: {}",
+            "expected: {:020}, have: {}",
             expected,
-            offset
+            segment.display(),
         );
+        expected += segment.metadata().unwrap().len();
     }
 
     let current = format!("{:020}", expected);
