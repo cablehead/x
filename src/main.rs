@@ -195,9 +195,6 @@ fn do_wal(path: &std::path::Path) -> Result<()> {
 
     std::env::set_current_dir(path)?;
 
-    // let first = format!("{:020}", 0);
-    // println!("first: {}", first);
-
     let mut expected = 0;
     let expr = "[0-9]".repeat(20);
     for segment in glob(&expr)?.map(|x| x.unwrap()) {
