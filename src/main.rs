@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net;
 use std::os::unix::fs::symlink;
 use std::process;
@@ -71,6 +71,14 @@ fn main() -> Result<()> {
                         .short('r')
                         .long("timestamp")
                         .about("prefix each line written with a timestamp"),
+                )
+                .arg(
+                    Arg::new("max-segment")
+                        .short('m')
+                        .long("max-segment")
+                        .about("maximum size for each segment in MB")
+                        .default_value("100")
+                        .takes_value(true),
                 ),
         )
         .get_matches();
@@ -80,7 +88,8 @@ fn main() -> Result<()> {
             // TODO: implement --timestamp
             let path: String = matches.value_of_t("path").unwrap();
             let path = std::path::Path::new(&path);
-            do_wal(&path)?;
+            let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
+            do_wal(io::stdin(), &path, max_segment * 1024 * 1024)?;
         }
         Some(("tcp", matches)) => {
             let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
@@ -196,11 +205,21 @@ mod tests {
         println!();
         println!("{:?}", dir);
 
-        do_wal(dir.path())?;
+        fn stdin() -> impl Read {
+            io::Cursor::new(
+                format!("{}\n", "x".repeat(1024))
+                    .repeat(4608)
+                    .as_bytes()
+                    .to_vec(),
+            )
+        }
 
-        do_wal(dir.path())?;
+        do_wal(stdin(), dir.path(), 1024 * 1024)?;
+        let output = std::process::Command::new("ls").arg("-alh").output()?;
+        io::stdout().write_all(&output.stdout).unwrap();
 
-        let output = std::process::Command::new("ls").arg("-al").output()?;
+        do_wal(stdin(), dir.path(), 1024 * 1024)?;
+        let output = std::process::Command::new("ls").arg("-alh").output()?;
         io::stdout().write_all(&output.stdout).unwrap();
 
         println!();
@@ -210,11 +229,8 @@ mod tests {
     }
 }
 
-fn do_wal(path: &std::path::Path) -> Result<()> {
+fn do_wal<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Result<()> {
     // TODO:
-    // - max segment size as arg
-    // - write stdin to segment
-    // - rotate segment when max size reached
     // - tests
     fs::create_dir(path)
         .or_else(|e| match e.kind() {
@@ -244,22 +260,49 @@ fn do_wal(path: &std::path::Path) -> Result<()> {
         expected += segment.metadata().unwrap().len();
     }
 
-    let current = format!("{:020}", expected);
+    fn open_current(expected: u64) -> Result<fs::File> {
+        let current = format!("{:020}", expected);
+        let fh = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&current)?;
 
-    let mut fh = fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(&current)?;
+        symlink(&current, "current").or_else(|e| match e.kind() {
+            io::ErrorKind::AlreadyExists => {
+                let _ = fs::remove_file("current");
+                return symlink(current, "current");
+            }
+            _ => Err(e),
+        })?;
 
-    symlink(&current, "current").or_else(|e| match e.kind() {
-        io::ErrorKind::AlreadyExists => {
-            let _ = fs::remove_file("current");
-            return symlink(current, "current");
+        Ok(fh)
+    }
+
+    let mut fh = open_current(expected)?;
+    let mut fh_size = fh.metadata()?.len();
+
+    let buf = BufReader::new(r);
+    for line in buf.lines() {
+        let line = line.unwrap();
+
+        let new_bytes = line.len() as u64 + 1;
+
+        assert!(
+            new_bytes <= max_segment,
+            "max_segment = {}, new_bytes = {}",
+            max_segment,
+            new_bytes
+        );
+
+        if fh_size + new_bytes > max_segment {
+            expected += fh_size;
+            fh = open_current(expected)?;
+            fh_size = 0;
         }
-        _ => Err(e),
-    })?;
 
-    write!(fh, "hello\n")?;
+        writeln!(fh, "{}", &line).unwrap();
+        fh_size += new_bytes;
+    }
 
     Ok(())
 }
