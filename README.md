@@ -5,7 +5,8 @@
 
 ```
 $ x stream <sock> broadcast  # currently tcp / spread
-$ x stream <sock> collect    # currently tcp / merge
+$ x stream <sock> split      # TBD
+$ x stream <sock> merge      # currently tcp / merge
 
 $ x wal ./path
 
