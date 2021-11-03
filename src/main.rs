@@ -12,7 +12,7 @@ use clap::{App, AppSettings, Arg};
 fn main() -> Result<()> {
     let matches = App::new("x")
         .version("0.0.1")
-        .about("swiss army knife for the command line")
+        .about("Swiss army knife for the command line")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)
         .subcommand(
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
         )
         .subcommand(
             App::new("wal")
-                .about("logging utilities")
+                .about("Logging utilities")
                 .setting(AppSettings::DisableHelpSubcommand)
                 .arg(
                     Arg::new("path")

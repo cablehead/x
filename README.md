@@ -1,4 +1,17 @@
 
+## Target Usage
+
+- Tentative
+
+```
+$ x stream <sock> broadcast  # currently tcp / spread
+$ x stream <sock> collect    # currently tcp / merge
+
+$ x wal ./path
+
+$ x exec -- <command> <args>...
+```
+
 ## To test
 
 - [ ] human friendly message when unable to bind to desired port
