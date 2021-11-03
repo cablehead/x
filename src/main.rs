@@ -2,6 +2,7 @@ use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net;
 use std::os::unix::fs::symlink;
+use std::process;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
@@ -39,20 +40,44 @@ fn main() -> Result<()> {
                 )),
         )
         .subcommand(
+            App::new("exec")
+                .about("Exec utilities")
+                .arg(
+                    Arg::new("command")
+                        .index(1)
+                        .about("command to run")
+                        .required(true),
+                )
+                .arg(
+                    Arg::new("arguments")
+                        .index(2)
+                        .about("arguments")
+                        .multiple_values(true)
+                        .required(false),
+                ),
+        )
+        .subcommand(
             App::new("wal")
-                .about("Logging utilities")
+                .about("logging utilities")
                 .setting(AppSettings::DisableHelpSubcommand)
                 .arg(
                     Arg::new("path")
                         .index(1)
                         .about("Path to write to")
                         .required(true),
+                )
+                .arg(
+                    Arg::new("timestamp")
+                        .short('r')
+                        .long("timestamp")
+                        .about("prefix each line written with a timestamp"),
                 ),
         )
         .get_matches();
 
     match matches.subcommand() {
         Some(("wal", matches)) => {
+            // TODO: implement --timestamp
             let path: String = matches.value_of_t("path").unwrap();
             let path = std::path::Path::new(&path);
             do_wal(&path)?;
@@ -69,6 +94,11 @@ fn main() -> Result<()> {
                 Some("spread") => do_spread(sock)?,
                 _ => unreachable!(),
             }
+        }
+        Some(("exec", matches)) => {
+            let command: String = matches.value_of_t("command").unwrap();
+            let arguments = matches.values_of_t::<String>("arguments").unwrap();
+            do_exec(command, arguments)?;
         }
         _ => unreachable!(),
     }
@@ -231,5 +261,25 @@ fn do_wal(path: &std::path::Path) -> Result<()> {
 
     write!(fh, "hello\n")?;
 
+    Ok(())
+}
+
+fn do_exec(command: String, arguments: Vec<String>) -> Result<()> {
+    let mut child = process::Command::new(command)
+        .args(arguments)
+        .stdout(process::Stdio::piped())
+        .spawn()
+        .expect("failed to execute process");
+
+    let stdout = child.stdout.take().unwrap();
+
+    let buf = BufReader::new(stdout);
+    for line in buf.lines() {
+        let line = line.unwrap();
+        println!("prefix: {:?}", line);
+    }
+
+    let status = child.wait().expect("failed to wait on child");
+    println!("status: {:?}", status);
     Ok(())
 }
