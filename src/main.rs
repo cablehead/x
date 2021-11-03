@@ -285,27 +285,20 @@ fn do_exec(command: String, arguments: Vec<String>) -> Result<()> {
         let buf = BufReader::new(upstream);
         for line in buf.lines() {
             let line = line.unwrap();
-            println!("input: {}", &line);
             writeln!(&downstream, "{}", line).unwrap();
             downstream.flush().unwrap();
         }
-        println!("{}:input done", now());
     });
 
-    {
-        let upstream = child.stdout.take().unwrap();
-        let mut downstream = io::stdout();
-        let buf = BufReader::new(upstream);
-        for line in buf.lines() {
-            let line = line.unwrap();
-            writeln!(&downstream, "{}:{}", now(), line).unwrap();
-            downstream.flush().unwrap();
-        }
-
-        println!("{}:output done", now());
-
-        let status = child.wait().expect("failed to wait on child");
-        println!("{}:status: {:?}", now(), status);
+    let upstream = child.stdout.take().unwrap();
+    let mut downstream = io::stdout();
+    let buf = BufReader::new(upstream);
+    for line in buf.lines() {
+        let line = line.unwrap();
+        writeln!(&downstream, "{}:{}", now(), line).unwrap();
+        downstream.flush().unwrap();
     }
-    Ok(())
+
+    let status = child.wait().expect("failed to wait on child");
+    process::exit(status.code().unwrap());
 }
