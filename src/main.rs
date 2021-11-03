@@ -264,22 +264,48 @@ fn do_wal(path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
+use chrono::{DateTime, SecondsFormat, Utc};
+
 fn do_exec(command: String, arguments: Vec<String>) -> Result<()> {
     let mut child = process::Command::new(command)
         .args(arguments)
+        .stdin(process::Stdio::piped())
         .stdout(process::Stdio::piped())
         .spawn()
         .expect("failed to execute process");
 
-    let stdout = child.stdout.take().unwrap();
-
-    let buf = BufReader::new(stdout);
-    for line in buf.lines() {
-        let line = line.unwrap();
-        println!("prefix: {:?}", line);
+    fn now() -> String {
+        let now: DateTime<Utc> = Utc::now();
+        return now.to_rfc3339_opts(SecondsFormat::Secs, true);
     }
 
-    let status = child.wait().expect("failed to wait on child");
-    println!("status: {:?}", status);
+    let upstream = io::stdin();
+    let mut downstream = child.stdin.take().unwrap();
+    thread::spawn(move || {
+        let buf = BufReader::new(upstream);
+        for line in buf.lines() {
+            let line = line.unwrap();
+            println!("input: {}", &line);
+            writeln!(&downstream, "{}", line).unwrap();
+            downstream.flush().unwrap();
+        }
+        println!("{}:input done", now());
+    });
+
+    {
+        let upstream = child.stdout.take().unwrap();
+        let mut downstream = io::stdout();
+        let buf = BufReader::new(upstream);
+        for line in buf.lines() {
+            let line = line.unwrap();
+            writeln!(&downstream, "{}:{}", now(), line).unwrap();
+            downstream.flush().unwrap();
+        }
+
+        println!("{}:output done", now());
+
+        let status = child.wait().expect("failed to wait on child");
+        println!("{}:status: {:?}", now(), status);
+    }
     Ok(())
 }
