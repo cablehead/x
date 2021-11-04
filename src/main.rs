@@ -90,7 +90,9 @@ fn main() -> Result<()> {
                     let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
                     do_log_write(io::stdin(), &path, max_segment * 1024 * 1024)?;
                 }
-                Some(("read", _matches)) => {}
+                Some(("read", _matches)) => {
+                    do_log_read(&path)?;
+                }
                 _ => unreachable!(),
             }
         }
@@ -231,6 +233,40 @@ mod tests {
         println!();
         Ok(())
     }
+}
+
+fn do_log_read(path: &std::path::Path) -> Result<()> {
+    let stdout = io::stdout();
+
+    std::env::set_current_dir(path)?;
+
+    let mut expected = 0;
+    let expr = "[0-9]".repeat(20);
+    for segment in glob(&expr)?.map(|x| x.unwrap()) {
+        let offset = segment
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap();
+        assert!(
+            offset == expected,
+            "expected: {:020}, have: {}",
+            expected,
+            segment.display(),
+        );
+        expected += segment.metadata().unwrap().len();
+
+        let fh = fs::OpenOptions::new().read(true).open(&segment)?;
+        let buf = BufReader::new(fh);
+        for line in buf.lines() {
+            let line = line.unwrap();
+            writeln!(&stdout, "{}", &line).unwrap();
+        }
+    }
+
+    Ok(())
 }
 
 fn do_log_write<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Result<()> {
