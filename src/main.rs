@@ -77,7 +77,16 @@ fn main() -> Result<()> {
                             .takes_value(true),
                     ),
                 )
-                .subcommand(App::new("read").about("read from the log to STDOUT")),
+                .subcommand(
+                    App::new("read").about("read from the log to STDOUT").arg(
+                        Arg::new("cursor")
+                            .short('c')
+                            .long("cursor")
+                            .about("current cursor to read from")
+                            .default_value("0")
+                            .takes_value(true),
+                    ),
+                ),
         )
         .get_matches();
 
@@ -90,8 +99,9 @@ fn main() -> Result<()> {
                     let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
                     do_log_write(io::stdin(), &path, max_segment * 1024 * 1024)?;
                 }
-                Some(("read", _matches)) => {
-                    do_log_read(&path)?;
+                Some(("read", matches)) => {
+                    let cursor: u64 = matches.value_of_t("cursor").unwrap();
+                    do_log_read(&mut io::stdout(), &path, cursor)?;
                 }
                 _ => unreachable!(),
             }
@@ -197,10 +207,12 @@ use glob::glob;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use tempfile::tempdir;
+    use super::{do_log_read, do_log_write};
+
+    use std::io::{self, Read, Write};
 
     use anyhow::Result;
+    use tempfile::tempdir;
 
     #[test]
     fn log_bootstrap() -> Result<()> {
@@ -233,11 +245,21 @@ mod tests {
         println!();
         Ok(())
     }
+
+    #[test]
+    fn log_read() -> Result<()> {
+        let dir = tempdir()?;
+
+        let stdin = io::Cursor::new("one\ntwo\nthree\nfour\n");
+        let mut stdout = io::Cursor::new(Vec::new());
+        do_log_write(stdin, dir.path(), 1024 * 1024)?;
+        do_log_read(&mut stdout, dir.path(), 0)?;
+        assert_eq!(stdout.get_ref(), "one\ntwo\nthree\nfour\n".as_bytes());
+        Ok(())
+    }
 }
 
-fn do_log_read(path: &std::path::Path) -> Result<()> {
-    let stdout = io::stdout();
-
+fn do_log_read<W: Write>(w: &mut W, path: &std::path::Path, _cursor: u64) -> Result<()> {
     std::env::set_current_dir(path)?;
 
     let mut expected = 0;
@@ -262,7 +284,7 @@ fn do_log_read(path: &std::path::Path) -> Result<()> {
         let buf = BufReader::new(fh);
         for line in buf.lines() {
             let line = line.unwrap();
-            writeln!(&stdout, "{}", &line).unwrap();
+            writeln!(w, "{}", &line).unwrap();
         }
     }
 
