@@ -7,8 +7,9 @@
 $ x stream <sock> broadcast  // currently tcp / spread
 $ x stream <sock> split      // TBD
 $ x stream <sock> merge      // currently tcp / merge
+$ x stream <sock> http       // TBD
 
-    <sock> is tcp:<[host:]port> or unix:<path> // TBD
+<sock> is tcp:<[host:]port> or unix:<path> // TBD
 
 $ x log ./path write
 $ x log ./path read
