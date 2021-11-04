@@ -17,6 +17,17 @@ $ x log ./path read
 $ x exec -- <command> <args>...
 ```
 
+## Todo
+
+### log / read
+
+- assert cursor is at a message boundary
+- assert cursor isn't passed end of stream
+- add a follow flag
+- add utilities to help track cursor:
+    - at least once, convenience to save the cursor while consuming stdout
+    - at most once, convenience to run a command, and only advance if the command is successful
+
 ## To test
 
 - [ ] human friendly message when unable to bind to desired port
