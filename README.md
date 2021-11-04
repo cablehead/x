@@ -1,7 +1,7 @@
 
 ## Target Usage
 
-- Tentative
+Tentative
 
 ```
 $ x stream <sock> broadcast  // currently tcp / spread
