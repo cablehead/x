@@ -4,11 +4,14 @@
 - Tentative
 
 ```
-$ x stream <sock> broadcast  # currently tcp / spread
-$ x stream <sock> split      # TBD
-$ x stream <sock> merge      # currently tcp / merge
+$ x stream <sock> broadcast  // currently tcp / spread
+$ x stream <sock> split      // TBD
+$ x stream <sock> merge      // currently tcp / merge
 
-$ x wal ./path
+    <sock> is tcp:<[host:]port> or unix:<path> // TBD
+
+$ x log ./path write
+$ x log ./path read
 
 $ x exec -- <command> <args>...
 ```

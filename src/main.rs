@@ -57,7 +57,7 @@ fn main() -> Result<()> {
                 ),
         )
         .subcommand(
-            App::new("wal")
+            App::new("log")
                 .about("Logging utilities")
                 .setting(AppSettings::DisableHelpSubcommand)
                 .arg(
@@ -84,12 +84,12 @@ fn main() -> Result<()> {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("wal", matches)) => {
+        Some(("log", matches)) => {
             // TODO: implement --timestamp
             let path: String = matches.value_of_t("path").unwrap();
             let path = std::path::Path::new(&path);
             let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
-            do_wal(io::stdin(), &path, max_segment * 1024 * 1024)?;
+            do_log(io::stdin(), &path, max_segment * 1024 * 1024)?;
         }
         Some(("tcp", matches)) => {
             let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
@@ -198,7 +198,8 @@ mod tests {
     use anyhow::Result;
 
     #[test]
-    fn wal_bootstrap() -> Result<()> {
+    fn log_bootstrap() -> Result<()> {
+        // TODO: assert the state of the files after two calls to do_log
         let dir = tempdir()?;
         println!();
         println!("---");
@@ -214,11 +215,11 @@ mod tests {
             )
         }
 
-        do_wal(stdin(), dir.path(), 1024 * 1024)?;
+        do_log(stdin(), dir.path(), 1024 * 1024)?;
         let output = std::process::Command::new("ls").arg("-alh").output()?;
         io::stdout().write_all(&output.stdout).unwrap();
 
-        do_wal(stdin(), dir.path(), 1024 * 1024)?;
+        do_log(stdin(), dir.path(), 1024 * 1024)?;
         let output = std::process::Command::new("ls").arg("-alh").output()?;
         io::stdout().write_all(&output.stdout).unwrap();
 
@@ -229,7 +230,7 @@ mod tests {
     }
 }
 
-fn do_wal<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Result<()> {
+fn do_log<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Result<()> {
     // TODO:
     // - tests
     fs::create_dir(path)
