@@ -59,6 +59,7 @@ fn main() -> Result<()> {
         .subcommand(
             App::new("log")
                 .about("Logging utilities")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
                 .setting(AppSettings::DisableHelpSubcommand)
                 .arg(
                     Arg::new("path")
@@ -66,30 +67,32 @@ fn main() -> Result<()> {
                         .about("Path to write to")
                         .required(true),
                 )
-                .arg(
-                    Arg::new("timestamp")
-                        .short('r')
-                        .long("timestamp")
-                        .about("prefix each line written with a timestamp"),
+                .subcommand(
+                    App::new("write").about("write STDIN to the log").arg(
+                        Arg::new("max-segment")
+                            .short('m')
+                            .long("max-segment")
+                            .about("maximum size for each segment in MB")
+                            .default_value("100")
+                            .takes_value(true),
+                    ),
                 )
-                .arg(
-                    Arg::new("max-segment")
-                        .short('m')
-                        .long("max-segment")
-                        .about("maximum size for each segment in MB")
-                        .default_value("100")
-                        .takes_value(true),
-                ),
+                .subcommand(App::new("read").about("read from the log to STDOUT")),
         )
         .get_matches();
 
     match matches.subcommand() {
         Some(("log", matches)) => {
-            // TODO: implement --timestamp
             let path: String = matches.value_of_t("path").unwrap();
             let path = std::path::Path::new(&path);
-            let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
-            do_log(io::stdin(), &path, max_segment * 1024 * 1024)?;
+            match matches.subcommand() {
+                Some(("write", matches)) => {
+                    let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
+                    do_log(io::stdin(), &path, max_segment * 1024 * 1024)?;
+                }
+                Some(("read", _matches)) => {}
+                _ => unreachable!(),
+            }
         }
         Some(("tcp", matches)) => {
             let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
