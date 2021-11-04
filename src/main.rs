@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, Write};
 use std::net;
 use std::os::unix::fs::symlink;
 use std::process;
@@ -210,6 +210,7 @@ mod tests {
     use super::{do_log_read, do_log_write};
 
     use std::io::{self, Read, Write};
+    use std::str::from_utf8;
 
     use anyhow::Result;
     use tempfile::tempdir;
@@ -250,16 +251,61 @@ mod tests {
     fn log_read() -> Result<()> {
         let dir = tempdir()?;
 
-        let stdin = io::Cursor::new("one\ntwo\nthree\nfour\n");
+        let segment1 = "one\ntwo\nthree\nfour\n";
+        let segment2 = "one-2\ntwo-2\nthree-2\nfour-2\n";
+        let segment3 = "one-3\ntwo-3\nthree-3\nfour-3\n";
+
+        // write the first segment
+        do_log_write(io::Cursor::new(segment1), dir.path(), 1024 * 1024)?;
+
+        // read all
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_write(stdin, dir.path(), 1024 * 1024)?;
         do_log_read(&mut stdout, dir.path(), 0)?;
-        assert_eq!(stdout.get_ref(), "one\ntwo\nthree\nfour\n".as_bytes());
+        assert_eq!(from_utf8(stdout.get_ref())?, segment1);
+
+        // read from cursor
+        let mut stdout = io::Cursor::new(Vec::new());
+        do_log_read(&mut stdout, dir.path(), "one\n".len() as u64)?;
+        assert_eq!(from_utf8(stdout.get_ref())?, "two\nthree\nfour\n");
+
+        // write again to generate two more segments
+        do_log_write(io::Cursor::new(segment2), dir.path(), 1024 * 1024)?;
+        do_log_write(io::Cursor::new(segment3), dir.path(), 1024 * 1024)?;
+
+        // read all
+        let mut stdout = io::Cursor::new(Vec::new());
+        do_log_read(&mut stdout, dir.path(), 0)?;
+        assert_eq!(
+            from_utf8(stdout.get_ref())?,
+            [segment1, segment2, segment3].join("")
+        );
+
+        // read from cursor that points into the second segment
+        let mut stdout = io::Cursor::new(Vec::new());
+        do_log_read(
+            &mut stdout,
+            dir.path(),
+            (segment1.len() + "one-2\n".len()) as u64,
+        )?;
+        assert_eq!(
+            from_utf8(stdout.get_ref())?,
+            ["two-2\nthree-2\nfour-2\n", segment3].join("")
+        );
+
+        // read from cursor that points into the third segment
+        let mut stdout = io::Cursor::new(Vec::new());
+        do_log_read(
+            &mut stdout,
+            dir.path(),
+            (segment1.len() + segment2.len() + "one-3\n".len()) as u64,
+        )?;
+        assert_eq!(from_utf8(stdout.get_ref())?, "two-3\nthree-3\nfour-3\n");
+
         Ok(())
     }
 }
 
-fn do_log_read<W: Write>(w: &mut W, path: &std::path::Path, _cursor: u64) -> Result<()> {
+fn do_log_read<W: Write>(w: &mut W, path: &std::path::Path, cursor: u64) -> Result<()> {
     std::env::set_current_dir(path)?;
 
     let mut expected = 0;
@@ -278,9 +324,21 @@ fn do_log_read<W: Write>(w: &mut W, path: &std::path::Path, _cursor: u64) -> Res
             expected,
             segment.display(),
         );
+
+        let current = expected;
         expected += segment.metadata().unwrap().len();
 
-        let fh = fs::OpenOptions::new().read(true).open(&segment)?;
+        // fast forward until we find the segment our cursor is in
+        if cursor >= expected {
+            continue;
+        }
+
+        let mut fh = fs::OpenOptions::new().read(true).open(&segment)?;
+        // fast forward within the current segment
+        if cursor > current {
+            fh.seek(io::SeekFrom::Start(cursor - current)).unwrap();
+        }
+
         let buf = BufReader::new(fh);
         for line in buf.lines() {
             let line = line.unwrap();
