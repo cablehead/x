@@ -88,7 +88,7 @@ fn main() -> Result<()> {
             match matches.subcommand() {
                 Some(("write", matches)) => {
                     let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
-                    do_log(io::stdin(), &path, max_segment * 1024 * 1024)?;
+                    do_log_write(io::stdin(), &path, max_segment * 1024 * 1024)?;
                 }
                 Some(("read", _matches)) => {}
                 _ => unreachable!(),
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn log_bootstrap() -> Result<()> {
-        // TODO: assert the state of the files after two calls to do_log
+        // TODO: assert the state of the files after two calls to do_log_write
         let dir = tempdir()?;
         println!();
         println!("---");
@@ -218,11 +218,11 @@ mod tests {
             )
         }
 
-        do_log(stdin(), dir.path(), 1024 * 1024)?;
+        do_log_write(stdin(), dir.path(), 1024 * 1024)?;
         let output = std::process::Command::new("ls").arg("-alh").output()?;
         io::stdout().write_all(&output.stdout).unwrap();
 
-        do_log(stdin(), dir.path(), 1024 * 1024)?;
+        do_log_write(stdin(), dir.path(), 1024 * 1024)?;
         let output = std::process::Command::new("ls").arg("-alh").output()?;
         io::stdout().write_all(&output.stdout).unwrap();
 
@@ -233,7 +233,7 @@ mod tests {
     }
 }
 
-fn do_log<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Result<()> {
+fn do_log_write<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Result<()> {
     // TODO:
     // - tests
     fs::create_dir(path)
