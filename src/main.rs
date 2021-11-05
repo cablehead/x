@@ -2,6 +2,7 @@ use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Seek, Write};
 use std::net;
 use std::os::unix::fs::symlink;
+use std::path::Path;
 use std::process;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -93,7 +94,7 @@ fn main() -> Result<()> {
     match matches.subcommand() {
         Some(("log", matches)) => {
             let path: String = matches.value_of_t("path").unwrap();
-            let path = std::path::Path::new(&path);
+            let path = Path::new(&path);
             match matches.subcommand() {
                 Some(("write", matches)) => {
                     let max_segment: u64 = matches.value_of_t("max-segment").unwrap();
@@ -219,10 +220,12 @@ mod tests {
     fn log_bootstrap() -> Result<()> {
         // TODO: assert the state of the files after two calls to do_log_write
         let dir = tempdir()?;
+        let path = dir.path();
+
         println!();
         println!("---");
         println!();
-        println!("{:?}", dir);
+        println!("DIR {:?}", path);
 
         fn stdin() -> impl Read {
             io::Cursor::new(
@@ -233,12 +236,18 @@ mod tests {
             )
         }
 
-        do_log_write(stdin(), dir.path(), 1024 * 1024)?;
-        let output = std::process::Command::new("ls").arg("-alh").output()?;
+        do_log_write(stdin(), path, 1024 * 1024)?;
+        let output = std::process::Command::new("ls")
+            .current_dir(path)
+            .arg("-alh")
+            .output()?;
         io::stdout().write_all(&output.stdout).unwrap();
 
-        do_log_write(stdin(), dir.path(), 1024 * 1024)?;
-        let output = std::process::Command::new("ls").arg("-alh").output()?;
+        do_log_write(stdin(), path, 1024 * 1024)?;
+        let output = std::process::Command::new("ls")
+            .current_dir(path)
+            .arg("-alh")
+            .output()?;
         io::stdout().write_all(&output.stdout).unwrap();
 
         println!();
@@ -250,31 +259,33 @@ mod tests {
     #[test]
     fn log_read() -> Result<()> {
         let dir = tempdir()?;
+        let path = dir.path();
+        println!("DIR {:?}", path);
 
         let segment1 = "one\ntwo\nthree\nfour\n";
         let segment2 = "one-2\ntwo-2\nthree-2\nfour-2\n";
         let segment3 = "one-3\ntwo-3\nthree-3\nfour-3\n";
 
         // write the first segment
-        do_log_write(io::Cursor::new(segment1), dir.path(), 1024 * 1024)?;
+        do_log_write(io::Cursor::new(segment1), path, 1024 * 1024)?;
 
         // read all
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(&mut stdout, dir.path(), 0)?;
+        do_log_read(&mut stdout, path, 0)?;
         assert_eq!(from_utf8(stdout.get_ref())?, segment1);
 
         // read from cursor
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(&mut stdout, dir.path(), "one\n".len() as u64)?;
+        do_log_read(&mut stdout, path, "one\n".len() as u64)?;
         assert_eq!(from_utf8(stdout.get_ref())?, "two\nthree\nfour\n");
 
         // write again to generate two more segments
-        do_log_write(io::Cursor::new(segment2), dir.path(), 1024 * 1024)?;
-        do_log_write(io::Cursor::new(segment3), dir.path(), 1024 * 1024)?;
+        do_log_write(io::Cursor::new(segment2), path, 1024 * 1024)?;
+        do_log_write(io::Cursor::new(segment3), path, 1024 * 1024)?;
 
         // read all
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(&mut stdout, dir.path(), 0)?;
+        do_log_read(&mut stdout, path, 0)?;
         assert_eq!(
             from_utf8(stdout.get_ref())?,
             [segment1, segment2, segment3].join("")
@@ -282,11 +293,7 @@ mod tests {
 
         // read from cursor that points into the second segment
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(
-            &mut stdout,
-            dir.path(),
-            (segment1.len() + "one-2\n".len()) as u64,
-        )?;
+        do_log_read(&mut stdout, path, (segment1.len() + "one-2\n".len()) as u64)?;
         assert_eq!(
             from_utf8(stdout.get_ref())?,
             ["two-2\nthree-2\nfour-2\n", segment3].join("")
@@ -296,7 +303,7 @@ mod tests {
         let mut stdout = io::Cursor::new(Vec::new());
         do_log_read(
             &mut stdout,
-            dir.path(),
+            path,
             (segment1.len() + segment2.len() + "one-3\n".len()) as u64,
         )?;
         assert_eq!(from_utf8(stdout.get_ref())?, "two-3\nthree-3\nfour-3\n");
@@ -305,11 +312,12 @@ mod tests {
     }
 }
 
-fn do_log_read<W: Write>(w: &mut W, path: &std::path::Path, cursor: u64) -> Result<()> {
-    std::env::set_current_dir(path)?;
-
+fn do_log_read<W: Write>(w: &mut W, path: &Path, cursor: u64) -> Result<()> {
     let mut expected = 0;
-    let expr = "[0-9]".repeat(20);
+
+    let expr = path.join("[0-9]".repeat(20));
+    let expr = expr.to_str().unwrap();
+
     for segment in glob(&expr)?.map(|x| x.unwrap()) {
         let offset = segment
             .file_name()
@@ -349,9 +357,7 @@ fn do_log_read<W: Write>(w: &mut W, path: &std::path::Path, cursor: u64) -> Resu
     Ok(())
 }
 
-fn do_log_write<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Result<()> {
-    // TODO:
-    // - tests
+fn do_log_write<R: Read>(r: R, path: &Path, max_segment: u64) -> Result<()> {
     fs::create_dir(path)
         .or_else(|e| match e.kind() {
             io::ErrorKind::AlreadyExists => Ok(()),
@@ -359,10 +365,11 @@ fn do_log_write<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Resu
         })
         .with_context(|| format!("could not create directory `{}`", path.display()))?;
 
-    std::env::set_current_dir(path)?;
-
     let mut expected = 0;
-    let expr = "[0-9]".repeat(20);
+
+    let expr = path.join("[0-9]".repeat(20));
+    let expr = expr.to_str().unwrap();
+
     for segment in glob(&expr)?.map(|x| x.unwrap()) {
         let offset = segment
             .file_name()
@@ -380,17 +387,18 @@ fn do_log_write<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Resu
         expected += segment.metadata().unwrap().len();
     }
 
-    fn open_current(expected: u64) -> Result<fs::File> {
+    fn open_current(path: &Path, expected: u64) -> Result<fs::File> {
         let current = format!("{:020}", expected);
         let fh = fs::OpenOptions::new()
             .append(true)
             .create(true)
-            .open(&current)?;
+            .open(path.join(&current))?;
 
-        symlink(&current, "current").or_else(|e| match e.kind() {
+        let link = path.join("current");
+        symlink(&current, &link).or_else(|e| match e.kind() {
             io::ErrorKind::AlreadyExists => {
-                let _ = fs::remove_file("current");
-                return symlink(current, "current");
+                let _ = fs::remove_file(&link);
+                return symlink(&current, &link);
             }
             _ => Err(e),
         })?;
@@ -398,7 +406,7 @@ fn do_log_write<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Resu
         Ok(fh)
     }
 
-    let mut fh = open_current(expected)?;
+    let mut fh = open_current(path, expected)?;
     let mut fh_size = fh.metadata()?.len();
 
     let buf = BufReader::new(r);
@@ -416,7 +424,7 @@ fn do_log_write<R: Read>(r: R, path: &std::path::Path, max_segment: u64) -> Resu
 
         if fh_size + new_bytes > max_segment {
             expected += fh_size;
-            fh = open_current(expected)?;
+            fh = open_current(path, expected)?;
             fh_size = 0;
         }
 
