@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+use std::time;
 
 use anyhow::{Context, Result};
 use clap::{App, AppSettings, Arg};
@@ -79,14 +80,19 @@ fn main() -> Result<()> {
                     ),
                 )
                 .subcommand(
-                    App::new("read").about("read from the log to STDOUT").arg(
-                        Arg::new("cursor")
-                            .short('c')
-                            .long("cursor")
-                            .about("current cursor to read from")
-                            .default_value("0")
-                            .takes_value(true),
-                    ),
+                    App::new("read")
+                        .about("read from the log to STDOUT")
+                        .arg(
+                            Arg::new("cursor")
+                                .short('c')
+                                .long("cursor")
+                                .about("current cursor to read from")
+                                .default_value("0")
+                                .takes_value(true),
+                        )
+                        .arg(Arg::new("follow").short('f').long("follow").about(
+                            "wait for additional data to be appended to the log",
+                        )),
                 ),
         )
         .get_matches();
@@ -102,7 +108,8 @@ fn main() -> Result<()> {
                 }
                 Some(("read", matches)) => {
                     let cursor: u64 = matches.value_of_t("cursor").unwrap();
-                    do_log_read(&mut io::stdout(), &path, cursor)?;
+                    let follow: bool = matches.is_present("follow");
+                    do_log_read(&mut io::stdout(), &path, cursor, follow)?;
                 }
                 _ => unreachable!(),
             }
@@ -271,12 +278,12 @@ mod tests {
 
         // read all
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(&mut stdout, path, 0)?;
+        do_log_read(&mut stdout, path, 0, false)?;
         assert_eq!(from_utf8(stdout.get_ref())?, segment1);
 
         // read from cursor
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(&mut stdout, path, "one\n".len() as u64)?;
+        do_log_read(&mut stdout, path, "one\n".len() as u64, false)?;
         assert_eq!(from_utf8(stdout.get_ref())?, "two\nthree\nfour\n");
 
         // write again to generate two more segments
@@ -285,7 +292,7 @@ mod tests {
 
         // read all
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(&mut stdout, path, 0)?;
+        do_log_read(&mut stdout, path, 0, false)?;
         assert_eq!(
             from_utf8(stdout.get_ref())?,
             [segment1, segment2, segment3].join("")
@@ -293,7 +300,12 @@ mod tests {
 
         // read from cursor that points into the second segment
         let mut stdout = io::Cursor::new(Vec::new());
-        do_log_read(&mut stdout, path, (segment1.len() + "one-2\n".len()) as u64)?;
+        do_log_read(
+            &mut stdout,
+            path,
+            (segment1.len() + "one-2\n".len()) as u64,
+            false,
+        )?;
         assert_eq!(
             from_utf8(stdout.get_ref())?,
             ["two-2\nthree-2\nfour-2\n", segment3].join("")
@@ -305,6 +317,7 @@ mod tests {
             &mut stdout,
             path,
             (segment1.len() + segment2.len() + "one-3\n".len()) as u64,
+            false,
         )?;
         assert_eq!(from_utf8(stdout.get_ref())?, "two-3\nthree-3\nfour-3\n");
 
@@ -312,49 +325,58 @@ mod tests {
     }
 }
 
-fn do_log_read<W: Write>(w: &mut W, path: &Path, cursor: u64) -> Result<()> {
-    let mut expected = 0;
+fn do_log_read<W: Write>(
+    w: &mut W,
+    path: &Path,
+    cursor: u64,
+    follow: bool,
+) -> Result<()> {
+    let mut offset = 0;
+    let mut segment = path.join(format!("{:020}", offset));
 
-    let expr = path.join("[0-9]".repeat(20));
-    let expr = expr.to_str().unwrap();
-
-    for segment in glob(&expr)?.map(|x| x.unwrap()) {
-        let offset = segment
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .parse::<u64>()
-            .unwrap();
-        assert!(
-            offset == expected,
-            "expected: {:020}, have: {}",
-            expected,
-            segment.display(),
-        );
-
-        let current = expected;
-        expected += segment.metadata().unwrap().len();
+    loop {
+        let segment_size = segment.metadata().unwrap().len();
 
         // fast forward until we find the segment our cursor is in
-        if cursor >= expected {
+        if cursor >= offset + segment_size {
+            offset = segment_size;
             continue;
         }
 
         let mut fh = fs::OpenOptions::new().read(true).open(&segment)?;
         // fast forward within the current segment
-        if cursor > current {
-            fh.seek(io::SeekFrom::Start(cursor - current)).unwrap();
+        if cursor > offset {
+            fh.seek(io::SeekFrom::Start(cursor - offset)).unwrap();
         }
 
-        let buf = BufReader::new(fh);
-        for line in buf.lines() {
-            let line = line.unwrap();
-            writeln!(w, "{}", &line).unwrap();
+        let mut lines = BufReader::new(&fh).lines();
+        loop {
+            match lines.next() {
+                Some(line) => {
+                    let line = line.unwrap();
+                    writeln!(w, "{}", &line).unwrap();
+                }
+                None => {
+                    // is the next segment available?
+                    let next_offset = offset + fh.metadata().unwrap().len();
+                    let next_segment = path.join(format!("{:020}", next_offset));
+                    if next_segment.is_file() {
+                        offset = next_offset;
+                        segment = next_segment;
+                        break;
+                    }
+
+                    if !follow {
+                        return Ok(());
+                    }
+
+                    // poll the current segment for new data
+                    let m = time::Duration::from_millis(50);
+                    thread::sleep(m);
+                }
+            }
         }
     }
-
-    Ok(())
 }
 
 fn do_log_write<R: Read>(r: R, path: &Path, max_segment: u64) -> Result<()> {
