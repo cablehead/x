@@ -7,7 +7,10 @@ use anyhow::Result;
 
 use clap;
 
-pub fn run(matches: &clap::ArgMatches, sock: net::SocketAddr) -> Result<()> {
+pub fn run(matches: &clap::ArgMatches) -> Result<()> {
+    let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
+    let sock =
+        net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)), port);
     match matches.subcommand_name() {
         Some("http") => run_http(sock)?,
         Some("merge") => run_merge(sock)?,
