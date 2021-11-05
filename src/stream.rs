@@ -4,7 +4,6 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
-
 use clap;
 
 pub fn run(matches: &clap::ArgMatches) -> Result<()> {
