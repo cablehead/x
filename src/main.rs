@@ -332,14 +332,14 @@ fn do_log_read<W: Write>(
     follow: bool,
 ) -> Result<()> {
     let mut offset = 0;
-    let mut segment = path.join(format!("{:020}", offset));
 
     loop {
+        let segment = path.join(format!("{:020}", offset));
         let segment_size = segment.metadata().unwrap().len();
 
         // fast forward until we find the segment our cursor is in
         if cursor >= offset + segment_size {
-            offset = segment_size;
+            offset += segment_size;
             continue;
         }
 
@@ -362,7 +362,6 @@ fn do_log_read<W: Write>(
                     let next_segment = path.join(format!("{:020}", next_offset));
                     if next_segment.is_file() {
                         offset = next_offset;
-                        segment = next_segment;
                         break;
                     }
 
