@@ -4,9 +4,27 @@ use std::thread;
 
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
-use clap;
+use clap::{App, Arg, ArgMatches};
 
-pub fn run(matches: &clap::ArgMatches) -> Result<()> {
+pub fn configure_app(app: App) -> App {
+    return app
+        .about("Exec utilities")
+        .arg(
+            Arg::new("command")
+                .index(1)
+                .about("command to run")
+                .required(true),
+        )
+        .arg(
+            Arg::new("arguments")
+                .index(2)
+                .about("arguments")
+                .multiple_values(true)
+                .required(false),
+        );
+}
+
+pub fn run(matches: &ArgMatches) -> Result<()> {
     let command: String = matches.value_of_t("command").unwrap();
     let arguments = matches.values_of_t::<String>("arguments").unwrap();
     run_exec(command, arguments)?;

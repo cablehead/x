@@ -4,9 +4,37 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
-use clap;
+use clap::{App, AppSettings, Arg, ArgMatches};
 
-pub fn run(matches: &clap::ArgMatches) -> Result<()> {
+pub fn configure_app(app: App) -> App {
+    return app
+        .about("Network utilities")
+        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .setting(AppSettings::DisableHelpSubcommand)
+        .arg(
+            Arg::new("port")
+                .short('p')
+                .long("port")
+                .about("TCP port to listen on")
+                .required(true)
+                .takes_value(true),
+        )
+        .subcommand(App::new("http").about(
+            "Serve HTTP. Requests are written to STDOUT and \
+                    responses are read from STDIN",
+        ))
+        .subcommand(
+            App::new("merge").about(
+                "Read lines from TCP connections and writes them serially to STDOUT",
+            ),
+        )
+        .subcommand(
+            App::new("spread")
+                .about("Read lines from STDIN and writes them to all TCP connections"),
+        );
+}
+
+pub fn run(matches: &ArgMatches) -> Result<()> {
     let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
     let sock =
         net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)), port);

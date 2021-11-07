@@ -6,10 +6,51 @@ use std::thread;
 use std::time;
 
 use anyhow::{Context, Result};
-use clap;
+use clap::{App, AppSettings, Arg, ArgMatches};
 use glob::glob;
 
-pub fn run(matches: &clap::ArgMatches) -> Result<()> {
+pub fn configure_app(app: App) -> App {
+    return app
+        .about("Logging utilities")
+        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .setting(AppSettings::DisableHelpSubcommand)
+        .arg(
+            Arg::new("path")
+                .index(1)
+                .about("Path to write to")
+                .required(true),
+        )
+        .subcommand(
+            App::new("write").about("write STDIN to the log").arg(
+                Arg::new("max-segment")
+                    .short('m')
+                    .long("max-segment")
+                    .about("maximum size for each segment in MB")
+                    .default_value("100")
+                    .takes_value(true),
+            ),
+        )
+        .subcommand(
+            App::new("read")
+                .about("read from the log to STDOUT")
+                .arg(
+                    Arg::new("cursor")
+                        .short('c')
+                        .long("cursor")
+                        .about("current cursor to read from")
+                        .default_value("0")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::new("follow")
+                        .short('f')
+                        .long("follow")
+                        .about("wait for additional data to be appended to the log"),
+                ),
+        );
+}
+
+pub fn run(matches: &ArgMatches) -> Result<()> {
     let path: String = matches.value_of_t("path").unwrap();
     let path = Path::new(&path);
     match matches.subcommand() {
