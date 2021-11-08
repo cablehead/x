@@ -8,6 +8,7 @@ use clap::{App, Arg, ArgMatches};
 
 pub fn configure_app(app: App) -> App {
     return app
+        .version("0.0.2")
         .about("Exec utilities")
         .arg(
             Arg::new("command")

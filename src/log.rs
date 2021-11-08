@@ -11,6 +11,7 @@ use glob::glob;
 
 pub fn configure_app(app: App) -> App {
     return app
+        .version("0.0.2")
         .about("Logging utilities")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)

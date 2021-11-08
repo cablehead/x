@@ -7,7 +7,7 @@ mod stream;
 
 fn main() -> Result<()> {
     let matches = App::new("x")
-        .version("0.0.1")
+        .version("0.0.2")
         .about("Swiss army knife for the command line")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)

@@ -8,6 +8,7 @@ use clap::{App, AppSettings, Arg, ArgMatches};
 
 pub fn configure_app(app: App) -> App {
     return app
+        .version("0.0.2")
         .about("Network utilities")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)
