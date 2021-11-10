@@ -19,7 +19,7 @@ fn stream_args_port_must_be_number() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("x")?;
     cmd.arg("stream");
     cmd.args(["--port", "bar"]);
-    cmd.arg("spread");
+    cmd.arg("broadcast");
     cmd.assert().failure().stderr(predicate::str::contains(
         "The argument \'bar\' isn\'t a valid value for \'port\'",
     ));

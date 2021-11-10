@@ -26,12 +26,20 @@ pub fn configure_app(app: App) -> App {
         ))
         .subcommand(
             App::new("merge").about(
-                "Read lines from TCP connections and writes them serially to STDOUT",
+                "Read lines from TCP connections and write them serially to STDOUT",
             ),
         )
         .subcommand(
-            App::new("spread")
-                .about("Read lines from STDIN and writes them to all TCP connections"),
+            App::new("broadcast")
+                .about("Read lines from STDIN and write them to all TCP connections")
+                .arg(
+                    Arg::new("history")
+                        .short('i')
+                        .long("history")
+                        .about("number of lines to keep in memory to be sent immediately to new connections")
+                        .takes_value(true)
+                        .default_value("0"),
+                ),
         );
 }
 
@@ -39,10 +47,14 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
     let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
     let sock =
         net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)), port);
-    match matches.subcommand_name() {
-        Some("http") => run_http(sock)?,
-        Some("merge") => run_merge(sock)?,
-        Some("spread") => run_spread(sock)?,
+    match matches.subcommand() {
+        Some(("http", _)) => run_http(sock)?,
+        Some(("merge", _)) => run_merge(sock)?,
+        Some(("broadcast", matches)) => {
+            let history: usize =
+                matches.value_of_t("history").unwrap_or_else(|e| e.exit());
+            run_broadcast(sock, history)?
+        }
         _ => unreachable!(),
     }
     Ok(())
@@ -85,17 +97,34 @@ fn run_merge(sock: net::SocketAddr) -> Result<()> {
     Ok(())
 }
 
-fn run_spread(sock: net::SocketAddr) -> Result<()> {
+fn run_broadcast(sock: net::SocketAddr, history: usize) -> Result<()> {
     let listener = net::TcpListener::bind(sock).unwrap();
 
     let conns = Vec::new();
     let conns = Arc::new(Mutex::new(conns));
 
+    let buffer = Vec::new();
+    let buffer = Arc::new(Mutex::new(buffer));
+
     {
         let conns = conns.clone();
+        let buffer = buffer.clone();
         thread::spawn(move || {
             for stream in listener.incoming() {
                 let stream = stream.unwrap();
+                if history > 0 {
+                    let buffer = buffer.lock().expect("poisoned");
+                    let mut is_err = false;
+                    for line in buffer.iter() {
+                        if writeln!(&stream, "{}", line).is_err() {
+                            is_err = true;
+                            break;
+                        }
+                    }
+                    if is_err {
+                        continue;
+                    }
+                }
                 let (tx, rx) = mpsc::channel();
                 conns.lock().expect("poisoned").push(tx);
                 thread::spawn(move || {
@@ -117,6 +146,13 @@ fn run_spread(sock: net::SocketAddr) -> Result<()> {
             .lock()
             .expect("poisoned")
             .retain(|conn| conn.send(line.clone()).is_ok());
+        if history > 0 {
+            let mut buffer = buffer.lock().expect("poisoned");
+            buffer.push(line);
+            if buffer.len() > history {
+                buffer.remove(0);
+            }
+        }
     }
     Ok(())
 }
