@@ -49,8 +49,8 @@ pub fn configure_app(app: App) -> App {
                         .about("wait for additional data to be appended to the log"),
                 )
                 .arg(Arg::new("track").short('t').long("track").about(
-                    "write the cursor of each line read to STDERR so clients \
-                            can resume reads",
+                    "write the cursor of each line read to STDERR to help clients \
+                            resume reads",
                 ))
                 .subcommand(
                     App::new("exec")
@@ -58,8 +58,7 @@ pub fn configure_app(app: App) -> App {
                             "execute a command for each line read from the log. \
                             If the command exits with a 0 / successful error code, \
                             the cursor of the read line is written to STDERR. \
-                            Otherwise the read terminates emitting the same \
-                            error code.",
+                            Otherwise the read will exit with the same error code.",
                         )
                         .setting(AppSettings::DisableHelpSubcommand)
                         .arg(
