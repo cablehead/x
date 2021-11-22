@@ -11,7 +11,7 @@ use glob::glob;
 
 pub fn configure_app(app: App) -> App {
     return app
-        .version("0.0.2")
+        .version("0.0.3")
         .about("Logging utilities")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)
@@ -47,6 +47,34 @@ pub fn configure_app(app: App) -> App {
                         .short('f')
                         .long("follow")
                         .about("wait for additional data to be appended to the log"),
+                )
+                .arg(Arg::new("track").short('t').long("track").about(
+                    "write the cursor of each line read to STDERR so clients \
+                            can resume reads",
+                ))
+                .subcommand(
+                    App::new("exec")
+                        .about(
+                            "execute a command for each line read from the log. \
+                            If the command exits with a 0 / successful error code, \
+                            the cursor of the read line is written to STDERR. \
+                            Otherwise the read terminates emitting the same \
+                            error code.",
+                        )
+                        .setting(AppSettings::DisableHelpSubcommand)
+                        .arg(
+                            Arg::new("command")
+                                .index(1)
+                                .about("command to run")
+                                .required(true),
+                        )
+                        .arg(
+                            Arg::new("arguments")
+                                .index(2)
+                                .about("arguments")
+                                .multiple_values(true)
+                                .required(false),
+                        ),
                 ),
         );
 }
@@ -62,7 +90,15 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
         Some(("read", matches)) => {
             let cursor: u64 = matches.value_of_t("cursor").unwrap();
             let follow: bool = matches.is_present("follow");
-            run_read(&mut io::stdout(), &path, cursor, follow)?;
+
+            let mut stderr = io::stderr();
+            let track = if matches.is_present("track") {
+                Some(&mut stderr)
+            } else {
+                None
+            };
+
+            run_read(&mut io::stdout(), &path, cursor, follow, track)?;
         }
         _ => unreachable!(),
     }
@@ -148,7 +184,13 @@ fn run_write<R: Read>(r: R, path: &Path, max_segment: u64) -> Result<()> {
     Ok(())
 }
 
-fn run_read<W: Write>(w: &mut W, path: &Path, cursor: u64, follow: bool) -> Result<()> {
+fn run_read<W: Write, T: Write>(
+    w: &mut W,
+    path: &Path,
+    cursor: u64,
+    follow: bool,
+    mut track: Option<&mut T>,
+) -> Result<()> {
     let mut offset = 0;
 
     loop {
@@ -165,6 +207,7 @@ fn run_read<W: Write>(w: &mut W, path: &Path, cursor: u64, follow: bool) -> Resu
         // fast forward within the current segment
         if cursor > offset {
             fh.seek(io::SeekFrom::Start(cursor - offset)).unwrap();
+            offset = cursor;
         }
 
         let mut lines = BufReader::new(&fh).lines();
@@ -173,13 +216,15 @@ fn run_read<W: Write>(w: &mut W, path: &Path, cursor: u64, follow: bool) -> Resu
                 Some(line) => {
                     let line = line.unwrap();
                     writeln!(w, "{}", &line).unwrap();
+                    offset += line.len() as u64 + 1;
+                    if let Some(ref mut t) = track {
+                        writeln!(t, "{}", offset).unwrap();
+                    }
                 }
                 None => {
                     // is the next segment available?
-                    let next_offset = offset + fh.metadata().unwrap().len();
-                    let next_segment = path.join(format!("{:020}", next_offset));
+                    let next_segment = path.join(format!("{:020}", offset));
                     if next_segment.is_file() {
-                        offset = next_offset;
                         break;
                     }
 
@@ -200,6 +245,7 @@ fn run_read<W: Write>(w: &mut W, path: &Path, cursor: u64, follow: bool) -> Resu
 mod tests {
     use super::{run_read, run_write};
 
+    use std::fs;
     use std::io::{self, Read, Write};
     use std::str::from_utf8;
 
@@ -261,12 +307,18 @@ mod tests {
 
         // read all
         let mut stdout = io::Cursor::new(Vec::new());
-        run_read(&mut stdout, path, 0, false)?;
+        run_read(&mut stdout, path, 0, false, None::<&mut fs::File>)?;
         assert_eq!(from_utf8(stdout.get_ref())?, segment1);
 
         // read from cursor
         let mut stdout = io::Cursor::new(Vec::new());
-        run_read(&mut stdout, path, "one\n".len() as u64, false)?;
+        run_read(
+            &mut stdout,
+            path,
+            "one\n".len() as u64,
+            false,
+            None::<&mut fs::File>,
+        )?;
         assert_eq!(from_utf8(stdout.get_ref())?, "two\nthree\nfour\n");
 
         // write again to generate two more segments
@@ -275,7 +327,7 @@ mod tests {
 
         // read all
         let mut stdout = io::Cursor::new(Vec::new());
-        run_read(&mut stdout, path, 0, false)?;
+        run_read(&mut stdout, path, 0, false, None::<&mut fs::File>)?;
         assert_eq!(
             from_utf8(stdout.get_ref())?,
             [segment1, segment2, segment3].join("")
@@ -288,6 +340,7 @@ mod tests {
             path,
             (segment1.len() + "one-2\n".len()) as u64,
             false,
+            None::<&mut fs::File>,
         )?;
         assert_eq!(
             from_utf8(stdout.get_ref())?,
@@ -301,6 +354,7 @@ mod tests {
             path,
             (segment1.len() + segment2.len() + "one-3\n".len()) as u64,
             false,
+            None::<&mut fs::File>,
         )?;
         assert_eq!(from_utf8(stdout.get_ref())?, "two-3\nthree-3\nfour-3\n");
 
