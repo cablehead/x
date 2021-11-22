@@ -11,6 +11,13 @@ pub fn configure_app(app: App) -> App {
         .version("0.0.2")
         .about("Exec utilities")
         .arg(
+            Arg::new("max-lines")
+            .long("max-lines")
+            .about(
+            "the number of lines to be sent to the exec'd process, before restarting it")
+            .takes_value(true)
+        )
+        .arg(
             Arg::new("command")
                 .index(1)
                 .about("command to run")
@@ -27,7 +34,9 @@ pub fn configure_app(app: App) -> App {
 
 pub fn run(matches: &ArgMatches) -> Result<()> {
     let command: String = matches.value_of_t("command").unwrap();
-    let arguments = matches.values_of_t::<String>("arguments").unwrap();
+    let arguments = matches
+        .values_of_t::<String>("arguments")
+        .unwrap_or(Vec::new());
     run_exec(command, arguments)?;
     Ok(())
 }

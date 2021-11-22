@@ -4,7 +4,7 @@
 Tentative
 
 ```
-$ x stream <sock> broadcast  // currently tcp / spread
+$ x stream <sock> broadcast
 $ x stream <sock> split      // TBD
 $ x stream <sock> merge      // currently tcp / merge
 $ x stream <sock> http       // TBD
