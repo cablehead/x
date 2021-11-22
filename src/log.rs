@@ -198,7 +198,7 @@ fn run_read<W: Write, T: Write>(
         let segment_size = segment.metadata().unwrap().len();
 
         // fast forward until we find the segment our cursor is in
-        if cursor >= offset + segment_size {
+        if cursor > offset + segment_size {
             offset += segment_size;
             continue;
         }
@@ -357,6 +357,17 @@ mod tests {
             None::<&mut fs::File>,
         )?;
         assert_eq!(from_utf8(stdout.get_ref())?, "two-3\nthree-3\nfour-3\n");
+
+        // read from cursor that points to the end of the third segment
+        let mut stdout = io::Cursor::new(Vec::new());
+        run_read(
+            &mut stdout,
+            path,
+            (segment1.len() + segment2.len() + segment3.len()) as u64,
+            false,
+            None::<&mut fs::File>,
+        )?;
+        assert_eq!(from_utf8(stdout.get_ref())?, "");
 
         Ok(())
     }
