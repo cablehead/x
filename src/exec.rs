@@ -8,7 +8,7 @@ use clap::{App, Arg, ArgMatches};
 
 pub fn configure_app(app: App) -> App {
     return app
-        .version("0.0.2")
+        .version("0.0.3")
         .about("Exec utilities")
         .arg(
             Arg::new("max-lines")
@@ -33,15 +33,20 @@ pub fn configure_app(app: App) -> App {
 }
 
 pub fn run(matches: &ArgMatches) -> Result<()> {
+    let max_lines: Option<u64> = matches.value_of_t("max-lines").ok();
     let command: String = matches.value_of_t("command").unwrap();
     let arguments = matches
         .values_of_t::<String>("arguments")
         .unwrap_or(Vec::new());
-    run_exec(command, arguments)?;
+    run_exec(command, arguments, max_lines)?;
     Ok(())
 }
 
-fn run_exec(command: String, arguments: Vec<String>) -> Result<()> {
+fn run_exec(
+    command: String,
+    arguments: Vec<String>,
+    _max_lines: Option<u64>,
+) -> Result<()> {
     let mut child = process::Command::new(command)
         .args(arguments)
         .stdin(process::Stdio::piped())
