@@ -1,7 +1,7 @@
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
 #[test]
@@ -44,5 +44,32 @@ fn exec() -> Result<(), Box<dyn std::error::Error>> {
     let mut got = String::new();
     stdout.read_to_string(&mut got)?;
     assert_eq!("test 1-2-3\n", got);
+    assert!(cmd.wait()?.success());
+    Ok(())
+}
+
+#[test]
+fn exec_io() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("x")?
+        .arg("exec")
+        .arg("--")
+        .arg("wc")
+        .arg("-l")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    {
+        let stdin = cmd.stdin.take().unwrap();
+        for _ in 0..10 {
+            writeln!(&stdin, "hi").unwrap();
+        }
+    }
+    let mut stdout = cmd.stdout.take().unwrap();
+
+    let mut got = String::new();
+    stdout.read_to_string(&mut got)?;
+    assert_eq!("10\n", got.trim_start());
+    assert!(cmd.wait()?.success());
     Ok(())
 }
