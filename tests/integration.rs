@@ -38,8 +38,7 @@ fn exec() -> Result<(), Box<dyn std::error::Error>> {
         .arg("1-2-3")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .spawn()
-        .expect("wah");
+        .spawn()?;
 
     let mut stdout = cmd.stdout.take().unwrap();
     let mut got = String::new();
