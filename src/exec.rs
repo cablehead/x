@@ -3,7 +3,6 @@ use std::process;
 use std::thread;
 
 use anyhow::Result;
-use chrono::{DateTime, SecondsFormat, Utc};
 use clap::{App, Arg, ArgMatches};
 
 pub fn configure_app(app: App) -> App {
@@ -54,11 +53,6 @@ fn run_exec(
         .spawn()
         .expect("failed to execute process");
 
-    fn now() -> String {
-        let now: DateTime<Utc> = Utc::now();
-        return now.to_rfc3339_opts(SecondsFormat::Secs, true);
-    }
-
     let upstream = io::stdin();
     let mut downstream = child.stdin.take().unwrap();
     thread::spawn(move || {
@@ -75,7 +69,7 @@ fn run_exec(
     let buf = BufReader::new(upstream);
     for line in buf.lines() {
         let line = line.unwrap();
-        writeln!(&downstream, "{}:{}", now(), line).unwrap();
+        writeln!(&downstream, "{}", line).unwrap();
         downstream.flush().unwrap();
     }
 
