@@ -29,7 +29,7 @@ fn stream_args_port_must_be_number() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn exec() -> Result<(), Box<dyn std::error::Error>> {
+fn exec_out() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("x")?
         .arg("exec")
         .arg("--")
@@ -49,7 +49,7 @@ fn exec() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn exec_io() -> Result<(), Box<dyn std::error::Error>> {
+fn exec_in_out() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("x")?
         .arg("exec")
         .arg("--")
@@ -70,6 +70,34 @@ fn exec_io() -> Result<(), Box<dyn std::error::Error>> {
     let mut got = String::new();
     stdout.read_to_string(&mut got)?;
     assert_eq!("10\n", got.trim_start());
+    assert!(cmd.wait()?.success());
+    Ok(())
+}
+
+#[test]
+fn exec_max_lines() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("x")?
+        .arg("exec")
+        .arg("--max-lines")
+        .arg("2")
+        .arg("--")
+        .arg("wc")
+        .arg("-l")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    {
+        let stdin = cmd.stdin.take().unwrap();
+        for _ in 0..10 {
+            writeln!(&stdin, "hi").unwrap();
+        }
+    }
+    let mut stdout = cmd.stdout.take().unwrap();
+
+    let mut got = String::new();
+    stdout.read_to_string(&mut got)?;
+    assert_eq!("2\n2\n2\n2\n2\n", got.trim_start());
     assert!(cmd.wait()?.success());
     Ok(())
 }
