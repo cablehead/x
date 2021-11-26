@@ -46,6 +46,11 @@ fn run_exec(
     arguments: Vec<String>,
     _max_lines: Option<u64>,
 ) -> Result<()> {
+    let status = spawn_child(command, arguments).unwrap();
+    process::exit(status.code().unwrap());
+}
+
+fn spawn_child(command: String, arguments: Vec<String>) -> Result<process::ExitStatus> {
     let mut child = process::Command::new(command)
         .args(arguments)
         .stdin(process::Stdio::piped())
@@ -73,6 +78,5 @@ fn run_exec(
         downstream.flush().unwrap();
     }
 
-    let status = child.wait().expect("failed to wait on child");
-    process::exit(status.code().unwrap());
+    Ok(child.wait().expect("failed to wait on child"))
 }
