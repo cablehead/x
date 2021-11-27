@@ -97,7 +97,8 @@ fn exec_max_lines() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut got = String::new();
     stdout.read_to_string(&mut got)?;
-    assert_eq!("2\n2\n2\n2\n2\n", got.trim_start());
+    got.retain(|c| c != ' ');
+    assert_eq!("2\n2\n2\n2\n2\n", got);
     assert!(cmd.wait()?.success());
     Ok(())
 }
