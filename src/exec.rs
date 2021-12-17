@@ -62,18 +62,17 @@ fn run_exec(
             let mut downstream: Downstream = rx.recv().unwrap();
             for line in buf.lines() {
                 let line = line.unwrap();
+                n += 1;
                 if let Some(m) = max_lines {
-                    if n >= m {
+                    if n > m {
                         drop(downstream);
                         downstream = rx.recv().unwrap();
-                        n = 0;
+                        n = 1;
                     }
                 }
                 writeln!(downstream, "{}", line).unwrap();
                 downstream.flush().unwrap();
-                n += 1;
             }
-
             done.store(true, Ordering::Relaxed);
         });
     }
