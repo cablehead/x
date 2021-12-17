@@ -51,7 +51,6 @@ fn run_exec(
     max_lines: Option<u64>,
 ) -> Result<()> {
     let done = Arc::new(AtomicBool::new(false));
-
     let (tx, rx) = mpsc::sync_channel(2);
     {
         let done = done.clone();
@@ -60,18 +59,28 @@ fn run_exec(
             let buf = BufReader::new(upstream);
             let mut n = 0;
             let mut downstream: Downstream = rx.recv().unwrap();
-            for line in buf.lines() {
-                let line = line.unwrap();
+            let mut lines = buf.lines();
+            let mut line = lines.next();
+
+            while line.is_some() {
+                writeln!(downstream, "{}", line.unwrap().unwrap()).unwrap();
+                downstream.flush().unwrap();
+
                 n += 1;
                 if let Some(m) = max_lines {
-                    if n > m {
+                    if n >= m {
                         drop(downstream);
+                        line = lines.next();
+                        if line.is_none() {
+                            break;
+                        }
+                        n = 0;
                         downstream = rx.recv().unwrap();
-                        n = 1;
+                        continue;
                     }
                 }
-                writeln!(downstream, "{}", line).unwrap();
-                downstream.flush().unwrap();
+
+                line = lines.next();
             }
             done.store(true, Ordering::Relaxed);
         });
