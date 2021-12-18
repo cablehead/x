@@ -75,6 +75,51 @@ fn exec_in_out() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn exec_child_ignores_stdin() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("x")?
+        .arg("exec")
+        .arg("--")
+        .arg("echo")
+        .arg("test")
+        .arg("1-2-3")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    let mut stdout = cmd.stdout.take().unwrap();
+    let mut got = String::new();
+    stdout.read_to_string(&mut got)?;
+    assert_eq!("test 1-2-3\n", got);
+    assert!(cmd.wait()?.success());
+
+    Ok(())
+}
+
+#[test]
+fn exec_broken_pipe() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("x")?
+        .arg("exec")
+        .arg("--")
+        .arg("head")
+        .arg("-n")
+        .arg("1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    let stdin = cmd.stdin.take().unwrap();
+    writeln!(&stdin, "oh hai").unwrap();
+
+    let mut stdout = cmd.stdout.take().unwrap();
+
+    let mut got = String::new();
+    stdout.read_to_string(&mut got)?;
+    assert_eq!("oh hai\n", got.trim_start());
+    assert!(cmd.wait()?.success());
+    Ok(())
+}
+
+#[test]
 fn exec_max_lines() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("x")?
         .arg("exec")

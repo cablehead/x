@@ -1,7 +1,6 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::process;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 use std::thread;
 
 use anyhow::Result;
@@ -50,45 +49,48 @@ fn run_exec(
     arguments: Vec<String>,
     max_lines: Option<u64>,
 ) -> Result<()> {
-    let done = Arc::new(AtomicBool::new(false));
-    let (tx, rx) = mpsc::sync_channel(2);
-    {
-        let done = done.clone();
-        thread::spawn(move || {
-            let upstream = io::stdin();
-            let buf = BufReader::new(upstream);
-            let mut n = 0;
-            let mut downstream: Downstream = rx.recv().unwrap();
-            let mut lines = buf.lines();
-            let mut line = lines.next();
+    let (tx, rx) = mpsc::sync_channel(0);
+    thread::spawn(move || {
+        let upstream = io::stdin();
+        let buf = BufReader::new(upstream);
+        let mut n = 0;
 
-            while line.is_some() {
-                writeln!(downstream, "{}", line.unwrap().unwrap()).unwrap();
-                downstream.flush().unwrap();
+        let pull: Option<Downstream> = rx.recv().unwrap();
+        let mut downstream = pull.unwrap();
 
-                n += 1;
-                if let Some(m) = max_lines {
-                    if n >= m {
-                        drop(downstream);
-                        line = lines.next();
-                        if line.is_none() {
-                            break;
-                        }
-                        n = 0;
-                        downstream = rx.recv().unwrap();
-                        continue;
-                    }
-                }
+        let mut lines = buf.lines();
+        let mut line = lines.next();
 
-                line = lines.next();
+        while line.is_some() {
+            if writeln!(downstream, "{}", line.unwrap().unwrap()).is_err() {
+                break;
             }
-            done.store(true, Ordering::Relaxed);
-        });
-    }
+            downstream.flush().unwrap();
+
+            n += 1;
+            if let Some(m) = max_lines {
+                if n >= m {
+                    drop(downstream);
+                    line = lines.next();
+                    if line.is_none() {
+                        break;
+                    }
+                    n = 0;
+                    let pull = rx.recv().unwrap();
+                    assert!(pull.is_none());
+                    let pull = rx.recv().unwrap();
+                    downstream = pull.unwrap();
+                    continue;
+                }
+            }
+
+            line = lines.next();
+        }
+    });
 
     loop {
         let status = spawn_child(&command, &arguments, &tx).unwrap();
-        if done.load(Ordering::Relaxed) {
+        if let Err(_) = tx.try_send(None) {
             process::exit(status.code().unwrap());
         }
     }
@@ -97,7 +99,7 @@ fn run_exec(
 fn spawn_child(
     command: &String,
     arguments: &Vec<String>,
-    stdin: &mpsc::SyncSender<Downstream>,
+    stdin: &mpsc::SyncSender<Option<Downstream>>,
 ) -> Result<process::ExitStatus> {
     let mut child = process::Command::new(command)
         .args(arguments)
@@ -108,7 +110,7 @@ fn spawn_child(
 
     {
         let downstream = child.stdin.take().unwrap();
-        let _ = stdin.send(Box::new(downstream));
+        stdin.send(Some(Box::new(downstream))).unwrap();
     }
 
     let upstream = child.stdout.take().unwrap();
