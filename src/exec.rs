@@ -8,10 +8,11 @@ use clap::{App, Arg, ArgMatches};
 
 pub fn configure_app(app: App) -> App {
     return app
-        .version("0.0.3")
+        .version("0.0.4")
         .about("Exec utilities")
         .arg(
             Arg::new("max-lines")
+            .short('l')
             .long("max-lines")
             .about(
             "the number of lines to be sent to the exec'd process, before restarting it")
