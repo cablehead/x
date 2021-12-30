@@ -91,7 +91,7 @@ fn run_exec(
 
     loop {
         let status = spawn_child(&command, &arguments, &tx).unwrap();
-        if let Err(_) = tx.try_send(None) {
+        if let Err(_) = tx.send(None) {
             process::exit(status.code().unwrap());
         }
     }
