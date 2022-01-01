@@ -5,10 +5,11 @@ use std::thread;
 
 use anyhow::Result;
 use clap::{App, AppSettings, Arg, ArgMatches};
+use serde_json::json;
 
 pub fn configure_app(app: App) -> App {
     return app
-        .version("0.0.2")
+        .version("0.0.3")
         .about("Network utilities")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DisableHelpSubcommand)
@@ -62,9 +63,36 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
 fn run_http(sock: net::SocketAddr) -> Result<()> {
     let server = tiny_http::Server::http(sock).unwrap();
-    for req in server.incoming_requests() {
-        let res = tiny_http::Response::from_string("hello world\n".to_string());
-        let _ = req.respond(res);
+    for mut req in server.incoming_requests() {
+        thread::spawn(move || {
+            // todo RequestID  uuid.UUID   `json:"request_id"`
+
+            let mut buffer = String::new();
+            req.as_reader().read_to_string(&mut buffer).unwrap();
+            let b64 = base64::encode_config(buffer, base64::URL_SAFE);
+
+            // gosh, this is terrible. I need to get better with rust's type system
+            let headers: Vec<(String, String)> = req
+                .headers()
+                .iter()
+                .map(|x| (format!("{}", x.field.as_str()), format!("{}", x.value)))
+                .collect();
+
+            let packet = json!({
+                "topic": "http.request",
+                "content": {
+                    "method": req.method().as_str(),
+                    "headers": headers,
+                    "remote_addr": req.remote_addr(),
+                    "url": req.url(),
+                    "body": b64,
+                },
+            });
+            println!("{}", packet);
+
+            let res = tiny_http::Response::from_string("hello world\n".to_string());
+            let _ = req.respond(res);
+        });
     }
     Ok(())
 }
