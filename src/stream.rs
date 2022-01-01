@@ -6,6 +6,7 @@ use std::thread;
 use anyhow::Result;
 use clap::{App, AppSettings, Arg, ArgMatches};
 use serde_json::json;
+use uuid::Uuid;
 
 pub fn configure_app(app: App) -> App {
     return app
@@ -65,7 +66,7 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
     let server = tiny_http::Server::http(sock).unwrap();
     for mut req in server.incoming_requests() {
         thread::spawn(move || {
-            // todo RequestID  uuid.UUID   `json:"request_id"`
+            let uid = Uuid::new_v4();
 
             let mut buffer = String::new();
             req.as_reader().read_to_string(&mut buffer).unwrap();
@@ -86,6 +87,7 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
                     "remote_addr": req.remote_addr(),
                     "url": req.url(),
                     "body": b64,
+                    "request_id": uid,
                 },
             });
             println!("{}", packet);
