@@ -27,6 +27,10 @@ $ x exec -- <command> <args>...
     - at least once, convenience to save the cursor while consuming stdout
     - at most once, convenience to run a command, and only advance if the command is successful
 
+### x stream - http
+
+- [ ] log server startup
+
 ## To test
 
 ### x stream
