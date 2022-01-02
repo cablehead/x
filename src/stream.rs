@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net;
 use std::sync::{mpsc, Arc, Mutex};
@@ -5,7 +6,8 @@ use std::thread;
 
 use anyhow::Result;
 use clap::{App, AppSettings, Arg, ArgMatches};
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_json;
 use uuid::Uuid;
 
 pub fn configure_app(app: App) -> App {
@@ -63,8 +65,38 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 }
 
 fn run_http(sock: net::SocketAddr) -> Result<()> {
+    let requests: HashMap<String, mpsc::Sender<String>> = HashMap::new();
+    let requests = Arc::new(Mutex::new(requests));
+
+    {
+        #[derive(Serialize, Deserialize)]
+        struct Response {
+            request_id: String,
+            body: String,
+        }
+
+        let requests = requests.clone();
+        thread::spawn(move || {
+            let stdin = io::stdin();
+            let buf = BufReader::new(stdin);
+            for line in buf.lines() {
+                let line = line.unwrap();
+                let res: Response = serde_json::from_str(&line).unwrap();
+                println!("stdin: {}", res.request_id);
+
+                let mut requests = requests.lock().expect("poisoned");
+                if let Some(tx) = requests.remove(&res.request_id) {
+                    tx.send(res.body.to_string()).unwrap();
+                } else {
+                    println!("unknown request_id: {}", res.request_id);
+                }
+            }
+        });
+    }
+
     let server = tiny_http::Server::http(sock).unwrap();
     for mut req in server.incoming_requests() {
+        let requests = requests.clone();
         thread::spawn(move || {
             let uid = Uuid::new_v4();
 
@@ -79,7 +111,7 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
                 .map(|x| (format!("{}", x.field.as_str()), format!("{}", x.value)))
                 .collect();
 
-            let packet = json!({
+            let packet = serde_json::json!({
                 "topic": "http.request",
                 "content": {
                     "method": req.method().as_str(),
@@ -90,9 +122,17 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
                     "request_id": uid,
                 },
             });
+
+            let (tx, rx) = mpsc::channel();
+
+            {
+                let mut requests = requests.lock().expect("poisoned");
+                requests.insert(uid.to_string(), tx);
+            }
             println!("{}", packet);
 
-            let res = tiny_http::Response::from_string("hello world\n".to_string());
+            let body = rx.recv().unwrap();
+            let res = tiny_http::Response::from_string(body);
             let _ = req.respond(res);
         });
     }
