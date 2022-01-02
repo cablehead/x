@@ -19,7 +19,7 @@ $ x exec -- <command> <args>...
 
 ## Todo
 
-### log / read
+### x log - read
 
 - assert cursor is at a message boundary
 - assert cursor isn't passed end of stream
@@ -29,5 +29,14 @@ $ x exec -- <command> <args>...
 
 ## To test
 
+### x stream
+
 - [ ] human friendly message when unable to bind to desired port
 - [ ] `x --port 2000 merge | x --port 2001 spread` works OK
+
+### x stream - http
+
+- [ ] response isn't valid JSON
+- [ ] `request_id` isn't pending
+- [ ] success
+- [ ] should see log response for each of the above

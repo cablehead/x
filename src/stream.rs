@@ -65,30 +65,51 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 }
 
 fn run_http(sock: net::SocketAddr) -> Result<()> {
-    let requests: HashMap<String, mpsc::Sender<String>> = HashMap::new();
+    #[derive(Serialize, Deserialize)]
+    struct Response {
+        request_id: String,
+        body: String,
+    }
+
+    let requests: HashMap<String, mpsc::Sender<Response>> = HashMap::new();
     let requests = Arc::new(Mutex::new(requests));
 
     {
-        #[derive(Serialize, Deserialize)]
-        struct Response {
-            request_id: String,
-            body: String,
-        }
-
         let requests = requests.clone();
         thread::spawn(move || {
             let stdin = io::stdin();
             let buf = BufReader::new(stdin);
             for line in buf.lines() {
                 let line = line.unwrap();
-                let res: Response = serde_json::from_str(&line).unwrap();
-                println!("stdin: {}", res.request_id);
+
+                let res = serde_json::from_str(&line);
+                if res.is_err() {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "topic": "http.response.log",
+                            "content": line,
+                            "severity": "ERROR",
+                            "error": "unable to parse response",
+                        })
+                    );
+                    continue;
+                }
+                let res: Response = res.unwrap();
 
                 let mut requests = requests.lock().expect("poisoned");
                 if let Some(tx) = requests.remove(&res.request_id) {
-                    tx.send(res.body.to_string()).unwrap();
+                    tx.send(res).unwrap();
                 } else {
-                    println!("unknown request_id: {}", res.request_id);
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "topic": "http.response.log",
+                            "content": res,
+                            "severity": "ERROR",
+                            "error": "unknown request_id",
+                        })
+                    );
                 }
             }
         });
@@ -131,9 +152,17 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
             }
             println!("{}", packet);
 
-            let body = rx.recv().unwrap();
-            let res = tiny_http::Response::from_string(body);
-            let _ = req.respond(res);
+            let res = rx.recv().unwrap();
+            let _ = req.respond(tiny_http::Response::from_string(&res.body));
+
+            println!(
+                "{}",
+                serde_json::json!({
+                    "topic": "http.response.log",
+                    "content": res,
+                    "severity": "INFO",
+                })
+            );
         });
     }
     Ok(())
