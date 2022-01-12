@@ -153,7 +153,9 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
             println!("{}", packet);
 
             let res = rx.recv().unwrap();
-            let _ = req.respond(tiny_http::Response::from_string(&res.body));
+
+            let header = tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf8"[..]).unwrap();
+            let _ = req.respond(tiny_http::Response::from_string(&res.body).with_header(header));
 
             println!(
                 "{}",

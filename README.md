@@ -1,7 +1,12 @@
 
-## Target Usage
+## Snippets
 
-Tentative
+
+```
+x stream -p 7999 merge | x stream -p 8080 http | x log ./http write
+```
+
+## Tentative Usage
 
 ```
 $ x stream <sock> broadcast
