@@ -69,6 +69,7 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
     struct Response {
         request_id: String,
         body: String,
+        headers: Option<Vec<(String, String)>>,
     }
 
     let requests: HashMap<String, mpsc::Sender<Response>> = HashMap::new();
@@ -154,8 +155,24 @@ fn run_http(sock: net::SocketAddr) -> Result<()> {
 
             let res = rx.recv().unwrap();
 
-            let header = tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf8"[..]).unwrap();
-            let _ = req.respond(tiny_http::Response::from_string(&res.body).with_header(header));
+            let mut http_response = tiny_http::Response::from_string(&res.body);
+
+            let header = tiny_http::Header::from_bytes(
+                &b"Content-Type"[..],
+                &b"text/html; charset=utf8"[..],
+            )
+            .unwrap();
+            http_response = http_response.with_header(header);
+
+            if let Some(ref headers) = res.headers {
+                for header in headers {
+                    let (key, value) = header;
+                    let add = tiny_http::Header::from_bytes(key.clone(), value.clone()).unwrap();
+                    http_response = http_response.with_header(add);
+                }
+            }
+
+            let _ = req.respond(http_response);
 
             println!(
                 "{}",
