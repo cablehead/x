@@ -50,7 +50,7 @@ pub fn configure_app(app: Command) -> Command {
 pub fn run(matches: &ArgMatches) -> Result<()> {
     let port: u16 = matches.value_of_t("port").unwrap_or_else(|e| e.exit());
     let sock =
-        net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)), port);
+        net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(0, 0, 0, 0)), port);
     match matches.subcommand() {
         Some(("http", _)) => run_http(sock)?,
         Some(("merge", _)) => run_merge(sock)?,
