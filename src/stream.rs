@@ -5,42 +5,42 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{Command, Arg, ArgMatches};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use uuid::Uuid;
 
-pub fn configure_app(app: App) -> App {
+pub fn configure_app(app: Command) -> Command {
     return app
         .version("0.0.3")
         .about("Network utilities")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .setting(AppSettings::DisableHelpSubcommand)
+        .subcommand_required(true)
+        .disable_help_subcommand(true)
         .arg(
             Arg::new("port")
                 .short('p')
                 .long("port")
-                .about("TCP port to listen on")
+                .help("TCP port to listen on")
                 .required(true)
                 .takes_value(true),
         )
-        .subcommand(App::new("http").about(
+        .subcommand(Command::new("http").about(
             "Serve HTTP. Requests are written to STDOUT and \
                     responses are read from STDIN",
         ))
         .subcommand(
-            App::new("merge").about(
+            Command::new("merge").about(
                 "Read lines from TCP connections and write them serially to STDOUT",
             ),
         )
         .subcommand(
-            App::new("broadcast")
+            Command::new("broadcast")
                 .about("Read lines from STDIN and write them to all TCP connections")
                 .arg(
                     Arg::new("history")
                         .short('i')
                         .long("history")
-                        .about("number of lines to keep in memory to be sent immediately to new connections")
+                        .help("number of lines to keep in memory to be sent immediately to new connections")
                         .takes_value(true)
                         .default_value("0"),
                 ),

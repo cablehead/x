@@ -1,19 +1,19 @@
 use anyhow::Result;
-use clap::{App, AppSettings};
+use clap::Command;
 
 mod exec;
 mod log;
 mod stream;
 
 fn main() -> Result<()> {
-    let matches = App::new("x")
+    let matches = Command::new("x")
         .version("0.0.4")
         .about("Swiss army knife for the command line")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .setting(AppSettings::DisableHelpSubcommand)
-        .subcommand(exec::configure_app(App::new("exec")))
-        .subcommand(log::configure_app(App::new("log")))
-        .subcommand(stream::configure_app(App::new("stream")))
+        .subcommand_required(true)
+        .disable_help_subcommand(true)
+        .subcommand(exec::configure_app(Command::new("exec")))
+        .subcommand(log::configure_app(Command::new("log")))
+        .subcommand(stream::configure_app(Command::new("stream")))
         .get_matches();
 
     match matches.subcommand() {

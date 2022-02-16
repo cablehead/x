@@ -4,9 +4,9 @@ use std::sync::mpsc;
 use std::thread;
 
 use anyhow::Result;
-use clap::{App, Arg, ArgMatches};
+use clap::{Command, Arg, ArgMatches};
 
-pub fn configure_app(app: App) -> App {
+pub fn configure_app(app: Command) -> Command {
     return app
         .version("0.0.4")
         .about("Exec utilities")
@@ -14,20 +14,20 @@ pub fn configure_app(app: App) -> App {
             Arg::new("max-lines")
             .short('l')
             .long("max-lines")
-            .about(
+            .help(
             "the number of lines to be sent to the exec'd process, before restarting it")
             .takes_value(true)
         )
         .arg(
             Arg::new("command")
                 .index(1)
-                .about("command to run")
+                .help("command to run")
                 .required(true),
         )
         .arg(
             Arg::new("arguments")
                 .index(2)
-                .about("arguments")
+                .help("arguments")
                 .multiple_values(true)
                 .required(false),
         );

@@ -6,39 +6,39 @@ use std::thread;
 use std::time;
 
 use anyhow::{Context, Result};
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use glob::glob;
 
-pub fn configure_app(app: App) -> App {
+pub fn configure_app(app: Command) -> Command {
     return app
         .version("0.0.3")
         .about("Logging utilities")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .setting(AppSettings::DisableHelpSubcommand)
+        .subcommand_required(true)
+        .disable_help_subcommand(true)
         .arg(
             Arg::new("path")
                 .index(1)
-                .about("Path to write to")
+                .help("Path to write to")
                 .required(true),
         )
         .subcommand(
-            App::new("write").about("write STDIN to the log").arg(
+            Command::new("write").about("write STDIN to the log").arg(
                 Arg::new("max-segment")
                     .short('m')
                     .long("max-segment")
-                    .about("maximum size for each segment in MB")
+                    .help("maximum size for each segment in MB")
                     .default_value("100")
                     .takes_value(true),
             ),
         )
         .subcommand(
-            App::new("read")
+            Command::new("read")
                 .about("read from the log to STDOUT")
                 .arg(
                     Arg::new("cursor")
                         .short('c')
                         .long("cursor")
-                        .about("current cursor to read from")
+                        .help("current cursor to read from")
                         .default_value("0")
                         .takes_value(true),
                 )
@@ -46,31 +46,31 @@ pub fn configure_app(app: App) -> App {
                     Arg::new("follow")
                         .short('f')
                         .long("follow")
-                        .about("wait for additional data to be appended to the log"),
+                        .help("wait for additional data to be appended to the log"),
                 )
-                .arg(Arg::new("track").short('t').long("track").about(
+                .arg(Arg::new("track").short('t').long("track").help(
                     "write the cursor of each line read to STDERR to help clients \
                             resume reads",
                 ))
                 .subcommand(
-                    App::new("exec")
+                    Command::new("exec")
                         .about(
                             "execute a command for each line read from the log. \
                             If the command exits with a 0 / successful error code, \
                             the cursor of the read line is written to STDERR. \
                             Otherwise the read will exit with the same error code.",
                         )
-                        .setting(AppSettings::DisableHelpSubcommand)
+                        .disable_help_subcommand(true)
                         .arg(
                             Arg::new("command")
                                 .index(1)
-                                .about("command to run")
+                                .help("command to run")
                                 .required(true),
                         )
                         .arg(
                             Arg::new("arguments")
                                 .index(2)
-                                .about("arguments")
+                                .help("arguments")
                                 .multiple_values(true)
                                 .required(false),
                         ),
