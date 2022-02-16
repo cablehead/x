@@ -232,7 +232,7 @@ fn run_read<W: Write, T: Write>(
                     }
 
                     // poll the current segment for new data
-                    let m = time::Duration::from_millis(50);
+                    let m = time::Duration::from_millis(10);
                     thread::sleep(m);
                 }
             }
